@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام مبيعات المقهى</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<style>
+body{font-family:Tajawal,sans-serif;background:#f5f5f4}.hidden{display:none!important}
+.card{background:#fff;border:1px solid #e7e5e4;border-radius:18px;box-shadow:0 2px 8px #00000008}
+.btn{border-radius:12px;font-weight:800;padding:.7rem 1rem;transition:.15s}.btn:active{transform:scale(.98)}
+.input{width:100%;border:1px solid #d6d3d1;border-radius:12px;padding:.7rem .85rem;outline:none;background:#fff}.input:focus{border-color:#b07d44;box-shadow:0 0 0 3px #b07d4420}
+.tab.active{background:#5a351d;color:#fff}.danger{color:#be123c}.positive{color:#047857}
+@media print{.no-print{display:none!important}.print-card{box-shadow:none;border:0}body{background:#fff}}
+</style>
+<script>
+tailwind.config={theme:{extend:{fontFamily:{sans:['Tajawal','sans-serif']},colors:{cafe:{50:'#FAF6F0',100:'#F4EAD8',200:'#E8D4B4',400:'#C79A63',500:'#B07D44',700:'#754726',800:'#5A351D',900:'#3D2212'}}}}}
+</script>
+</head>
+<body class="min-h-screen text-stone-800">
+
+<!-- CONFIG: put your Supabase project values here -->
+<script>
+const SUPABASE_URL = "YOUR_SUPABASE_URL";
+const SUPABASE_PUBLISHABLE_KEY = "YOUR_SUPABASE_PUBLISHABLE_KEY";
+</script>
+
+<div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[100] hidden bg-stone-900 text-white px-5 py-3 rounded-full shadow-xl text-sm font-bold"></div>
+
+<!-- LOGIN -->
+<section id="auth-screen" class="min-h-screen flex items-center justify-center p-5 bg-gradient-to-br from-cafe-900 via-cafe-800 to-stone-900">
+  <div class="w-full max-w-md card p-7">
+    <div class="text-center mb-6">
+      <div class="mx-auto w-16 h-16 rounded-2xl bg-cafe-800 text-amber-200 flex items-center justify-center text-3xl mb-3"><i class="fa-solid fa-mug-saucer"></i></div>
+      <h1 class="text-2xl font-black text-cafe-900">نظام مبيعات المقهى</h1>
+      <p class="text-sm text-stone-500 mt-1">تسجيل الدخول للوصول إلى بيانات المقهى</p>
+    </div>
+    <div id="setup-warning" class="hidden bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-3 text-sm mb-4">
+      أضف بيانات Supabase في أعلى الملف أولًا.
+    </div>
+    <form id="auth-form" class="space-y-3">
+      <input id="email" type="email" required class="input" placeholder="البريد الإلكتروني">
+      <input id="password" type="password" required class="input" placeholder="كلمة المرور">
+      <button class="btn w-full bg-cafe-800 text-white" type="submit"><i class="fa-solid fa-right-to-bracket ml-2"></i><span id="auth-submit">دخول</span></button>
+    </form>
+    <button id="toggle-auth" class="w-full mt-3 text-cafe-800 font-bold text-sm">إنشاء حساب جديد</button>
+    <button id="reset-password" class="w-full mt-3 text-stone-500 text-xs">نسيت كلمة المرور؟</button>
+    <p id="auth-message" class="text-center text-sm mt-4"></p>
+  </div>
+</section>
+
+<!-- APP -->
+<div id="app" class="hidden">
+<header class="sticky top-0 z-40 bg-cafe-900 text-white shadow-lg no-print">
+  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <div class="w-11 h-11 rounded-2xl bg-cafe-700 flex items-center justify-center text-amber-200"><i class="fa-solid fa-mug-saucer text-xl"></i></div>
+      <div><div class="font-black text-lg">نظام مبيعات المقهى</div><div id="user-email" class="text-[11px] text-cafe-200"></div></div>
+    </div>
+    <button id="logout" class="btn bg-white/10 hover:bg-white/20 text-sm"><i class="fa-solid fa-right-from-bracket ml-1"></i>خروج</button>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto p-4 md:p-6 space-y-5">
+  <nav class="flex gap-2 overflow-x-auto no-print">
+    <button class="tab active btn whitespace-nowrap" data-tab="today">اليوم</button>
+    <button class="tab btn bg-white whitespace-nowrap" data-tab="reports">التقارير</button>
+    <button class="tab btn bg-white whitespace-nowrap" data-tab="products">المنتجات</button>
+    <button class="tab btn bg-white whitespace-nowrap" data-tab="settings">الإعدادات</button>
+  </nav>
+
+  <section id="tab-today" class="space-y-5">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="card p-4"><div class="text-xs text-stone-500 font-bold">مبيعات اليوم</div><div id="kpi-sales" class="text-2xl font-black positive mt-1">0 ر.س</div></div>
+      <div class="card p-4"><div class="text-xs text-stone-500 font-bold">مصاريف اليوم</div><div id="kpi-expenses" class="text-2xl font-black danger mt-1">0 ر.س</div></div>
+      <div class="card p-4"><div class="text-xs text-stone-500 font-bold">صافي اليوم</div><div id="kpi-profit" class="text-2xl font-black text-cafe-800 mt-1">0 ر.س</div></div>
+      <div class="card p-4"><div class="text-xs text-stone-500 font-bold">القطع المباعة</div><div id="kpi-items" class="text-2xl font-black mt-1">0</div></div>
+    </div>
+
+    <div class="grid lg:grid-cols-3 gap-5">
+      <div class="lg:col-span-2 space-y-5">
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-black text-lg">مبيعات اليوم</h2>
+            <span id="sales-date" class="text-xs text-stone-500"></span>
+          </div>
+          <div id="products-grid" class="grid sm:grid-cols-2 gap-3"></div>
+        </div>
+
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-3"><h2 class="font-black text-lg">المصاريف</h2><span id="expense-count" class="text-xs text-stone-500"></span></div>
+          <form id="expense-form" class="grid sm:grid-cols-12 gap-2 mb-4">
+            <input id="expense-desc" class="input sm:col-span-5" required placeholder="بيان المصروف">
+            <input id="expense-amount" class="input sm:col-span-3" type="number" min="0.01" step="0.01" required placeholder="المبلغ">
+            <select id="expense-category" class="input sm:col-span-4">
+              <option>مواد خام</option><option>فواتير وشحن</option><option>صيانة ونظافة</option><option>رواتب ونثريات</option><option>أخرى</option>
+            </select>
+            <button class="btn bg-rose-600 text-white sm:col-span-12" type="submit">تسجيل المصروف</button>
+          </form>
+          <div id="expenses-list" class="space-y-2"></div>
+        </div>
+      </div>
+
+      <aside class="card p-5 h-fit lg:sticky lg:top-24 print-card">
+        <h2 class="font-black text-lg mb-4">ملخص الوردية</h2>
+        <div id="summary-sales" class="space-y-2 text-sm"></div>
+        <hr class="my-4">
+        <div id="summary-expenses" class="space-y-2 text-sm"></div>
+        <div class="bg-cafe-50 border border-cafe-200 rounded-xl p-4 mt-4 space-y-2">
+          <div class="flex justify-between"><span>المبيعات</span><b id="sum-sales">0</b></div>
+          <div class="flex justify-between"><span>المصاريف</span><b id="sum-expenses">0</b></div>
+          <div class="border-t border-cafe-200 pt-2 flex justify-between font-black text-lg"><span>الصافي</span><span id="sum-profit">0</span></div>
+        </div>
+        <div class="space-y-2 mt-4 no-print">
+          <button id="close-day" class="btn w-full bg-emerald-700 text-white">حفظ وإغلاق اليوم</button>
+          <button id="print" class="btn w-full bg-cafe-900 text-white">طباعة التقرير</button>
+          <button id="clear-day" class="btn w-full bg-rose-50 text-rose-700 border border-rose-200">تصفير اليوم الحالي</button>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="tab-reports" class="hidden space-y-5">
+    <div class="grid lg:grid-cols-2 gap-5">
+      <div class="card p-5"><h2 class="font-black text-lg mb-3">ملخص الفترة</h2><div class="grid grid-cols-2 gap-3"><div class="bg-emerald-50 p-3 rounded-xl"><small>المبيعات</small><div id="period-sales" class="font-black text-xl"></div></div><div class="bg-rose-50 p-3 rounded-xl"><small>المصاريف</small><div id="period-expenses" class="font-black text-xl"></div></div><div class="bg-cafe-50 p-3 rounded-xl"><small>الصافي</small><div id="period-profit" class="font-black text-xl"></div></div><div class="bg-stone-50 p-3 rounded-xl"><small>الأيام</small><div id="period-days" class="font-black text-xl"></div></div></div></div>
+      <div class="card p-5"><h2 class="font-black text-lg mb-3">المبيعات خلال آخر الأيام</h2><canvas id="sales-chart" height="180"></canvas></div>
+    </div>
+    <div class="card p-5">
+      <div class="flex justify-between items-center mb-3"><h2 class="font-black text-lg">سجل الأيام المغلقة</h2><button id="export-csv" class="btn bg-stone-900 text-white text-sm">تصدير CSV</button></div>
+      <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-stone-100"><tr><th class="p-2 text-right">التاريخ</th><th class="p-2">المبيعات</th><th class="p-2">المصاريف</th><th class="p-2">الصافي</th><th class="p-2">إجراء</th></tr></thead><tbody id="history-body"></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="tab-products" class="hidden space-y-5">
+    <div class="card p-5">
+      <h2 class="font-black text-lg mb-4">إدارة المنتجات</h2>
+      <form id="product-form" class="grid sm:grid-cols-12 gap-2 mb-5">
+        <input id="product-name" class="input sm:col-span-5" required placeholder="اسم المنتج">
+        <input id="product-price" class="input sm:col-span-3" type="number" min="0.01" step="0.01" required placeholder="السعر">
+        <select id="product-icon" class="input sm:col-span-2"><option value="fa-mug-hot">قهوة</option><option value="fa-glass-water">مشروب</option><option value="fa-cookie">حلى</option><option value="fa-bottle-water">مياه</option><option value="fa-utensils">وجبة</option></select>
+        <button class="btn bg-cafe-800 text-white sm:col-span-2" type="submit">إضافة</button>
+      </form>
+      <div id="product-manager" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+    </div>
+  </section>
+
+  <section id="tab-settings" class="hidden">
+    <div class="card p-5 max-w-2xl">
+      <h2 class="font-black text-lg mb-2">الإعدادات</h2>
+      <p class="text-sm text-stone-500 mb-4">يمكنك تغيير اسم المقهى لاحقًا من هنا. بيانات المبيعات مرتبطة بحسابك.</p>
+      <input id="cafe-name" class="input mb-3" placeholder="اسم المقهى">
+      <button id="save-settings" class="btn bg-cafe-800 text-white">حفظ</button>
+    </div>
+  </section>
+</main>
+</div>
+
+<script>
+const configured = SUPABASE_URL.startsWith("https://") && SUPABASE_PUBLISHABLE_KEY !== "YOUR_SUPABASE_PUBLISHABLE_KEY";
+const sb = configured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY) : null;
+let user=null, products=[], expenses=[], history=[], chart=null, authMode="login";
+
+const $=id=>document.getElementById(id);
+const money=n=>Number(n||0).toLocaleString("ar-SA",{maximumFractionDigits:2})+" ر.س";
+const toast=m=>{const e=$("toast");e.textContent=m;e.classList.remove("hidden");setTimeout(()=>e.classList.add("hidden"),2500)};
+function escapeHtml(s){return String(s??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]))}
+
+function setAuthMessage(m,ok=false){$("auth-message").textContent=m;$("auth-message").className="text-center text-sm mt-4 "+(ok?"text-emerald-700":"text-rose-700")}
+$("toggle-auth").onclick=()=>{authMode=authMode==="login"?"signup":"login";$("auth-submit").textContent=authMode==="login"?"دخول":"إنشاء الحساب";$("toggle-auth").textContent=authMode==="login"?"إنشاء حساب جديد":"لدي حساب بالفعل";setAuthMessage("")};
+$("auth-form").onsubmit=async e=>{
+ e.preventDefault(); if(!configured){$("setup-warning").classList.remove("hidden");return}
+ const email=$("email").value.trim(),password=$("password").value;
+ let r=authMode==="login"?await sb.auth.signInWithPassword({email,password}):await sb.auth.signUp({email,password});
+ if(r.error)return setAuthMessage(r.error.message);
+ if(authMode==="signup"&&!r.data.session)return setAuthMessage("تم إنشاء الحساب. افحص بريدك لتأكيد الحساب ثم سجل الدخول.",true);
+ setAuthMessage("تم بنجاح",true);
+};
+$("reset-password").onclick=async()=>{if(!sb)return;$("auth-message").textContent="";const email=$("email").value.trim();if(!email)return setAuthMessage("اكتب بريدك أولًا");const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});setAuthMessage(error?error.message:"تم إرسال رابط استعادة كلمة المرور إلى بريدك.",!error)};
+$("logout").onclick=()=>sb?.auth.signOut();
+$("print").onclick=()=>window.print();
+
+async function ensureDefaults(){
+ const {data,error}=await sb.from("products").select("id").limit(1);
+ if(error) throw error;
+ if(!data.length){
+   const defaults=[
+    ["قهوة اليوم",13,"fa-mug-hot"],["V60",17,"fa-filter"],["أيس تي",13,"fa-glass-water"],
+    ["حلى (15)",15,"fa-cookie"],["حلى (20)",20,"fa-cake-candles"]
+   ];
+   await sb.from("products").insert(defaults.map(x=>({user_id:user.id,name:x[0],price:x[1],icon:x[2]})));
+ }
+}
+
+async function loadAll(){
+ await ensureDefaults();
+ const [p,e,h]=await Promise.all([
+  sb.from("products").select("*").eq("user_id",user.id).eq("active",true).order("created_at"),
+  sb.from("expenses").select("*").eq("user_id",user.id).eq("day_key",dayKey()).order("created_at",{ascending:false}),
+  sb.from("daily_reports").select("*").eq("user_id",user.id).order("day_key",{ascending:false})
+ ]);
+ if(p.error||e.error||h.error) throw p.error||e.error||h.error;
+ products=p.data||[];expenses=e.data||[];history=h.data||[];
+ renderProducts();renderExpenses();renderStats();renderHistory();renderReports();
+}
+function dayKey(){return new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Riyadh"})}
+function productQty(id){const p=products.find(x=>x.id===id);return Number(p?.today_qty||0)}
+async function changeQty(id,delta){
+ const p=products.find(x=>x.id===id);if(!p)return;
+ const qty=Math.max(0,productQty(id)+delta);
+ const {error}=await sb.from("products").update({today_qty:qty}).eq("id",id).eq("user_id",user.id);
+ if(error)return toast(error.message);p.today_qty=qty;renderProducts();renderStats();
+}
+async function setQty(id,val){const qty=Math.max(0,parseInt(val)||0);const {error}=await sb.from("products").update({today_qty:qty}).eq("id",id).eq("user_id",user.id);if(error)return toast(error.message);products.find(x=>x.id===id).today_qty=qty;renderProducts();renderStats()}
+
+function renderProducts(){
+ $("products-grid").innerHTML=products.map(p=>`
+ <div class="border rounded-2xl p-4 bg-white">
+  <div class="flex justify-between items-start"><div class="flex gap-3 items-center"><div class="w-10 h-10 rounded-xl bg-cafe-100 text-cafe-800 flex items-center justify-center"><i class="fa-solid ${p.icon||"fa-mug-hot"}"></i></div><div><b>${escapeHtml(p.name)}</b><div class="text-emerald-700 font-black">${money(p.price)}</div></div></div></div>
+  <div class="flex justify-between items-center mt-4 pt-3 border-t"><span class="text-xs text-stone-500">الكمية</span><div class="flex items-center gap-2"><button class="btn bg-stone-100" onclick="changeQty('${p.id}',-1)">−</button><input class="w-12 text-center border rounded-lg py-2" value="${productQty(p.id)}" onchange="setQty('${p.id}',this.value)"><button class="btn bg-cafe-800 text-white" onclick="changeQty('${p.id}',1)">+</button></div></div>
+ </div>`).join("");
+ $("sales-date").textContent=new Date().toLocaleDateString("ar-SA",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
+}
+function totals(){const sales=products.reduce((s,p)=>s+Number(p.price)*productQty(p.id),0),items=products.reduce((s,p)=>s+productQty(p.id),0),ex=expenses.reduce((s,e)=>s+Number(e.amount),0);return {sales,items,ex,profit:sales-ex}}
+function renderStats(){const t=totals();$("kpi-sales").textContent=money(t.sales);$("kpi-expenses").textContent=money(t.ex);$("kpi-profit").textContent=money(t.profit);$("kpi-items").textContent=t.items;$("sum-sales").textContent=money(t.sales);$("sum-expenses").textContent=money(t.ex);$("sum-profit").textContent=money(t.profit);
+ $("summary-sales").innerHTML=products.filter(p=>productQty(p.id)>0).map(p=>`<div class="flex justify-between"><span>${escapeHtml(p.name)} × ${productQty(p.id)}</span><b>${money(p.price*productQty(p.id))}</b></div>`).join("")||`<div class="text-stone-400 text-center">لا توجد مبيعات</div>`;
+ $("summary-expenses").innerHTML=expenses.map(e=>`<div class="flex justify-between"><span>${escapeHtml(e.desc)}</span><b class="danger">${money(e.amount)}</b></div>`).join("")||`<div class="text-stone-400 text-center">لا توجد مصاريف</div>`;
+}
+$("expense-form").onsubmit=async e=>{e.preventDefault();const row={user_id:user.id,day_key:dayKey(),desc:$("expense-desc").value.trim(),amount:Number($("expense-amount").value),category:$("expense-category").value};const {error}=await sb.from("expenses").insert(row);if(error)return toast(error.message);expenses.unshift({...row,id:crypto.randomUUID()});$("expense-form").reset();renderExpenses();renderStats();toast("تم تسجيل المصروف")};
+function renderExpenses(){$("expense-count").textContent=`${expenses.length} بند`;$("expenses-list").innerHTML=expenses.map(e=>`<div class="flex justify-between items-center border rounded-xl p-3"><div><b>${escapeHtml(e.desc)}</b><div class="text-xs text-stone-500">${escapeHtml(e.category)}</div></div><div class="flex items-center gap-3"><b class="danger">${money(e.amount)}</b><button onclick="deleteExpense('${e.id}')" class="text-stone-400">🗑</button></div></div>`).join("")||`<div class="text-center text-stone-400 py-4">لا توجد مصاريف</div>`}
+async function deleteExpense(id){if(!confirm("حذف المصروف؟"))return;const {error}=await sb.from("expenses").delete().eq("id",id).eq("user_id",user.id);if(error)return toast(error.message);expenses=expenses.filter(e=>e.id!==id);renderExpenses();renderStats()}
+
+$("close-day").onclick=async()=>{
+ const t=totals();if(!t.sales&&!t.ex)return toast("اليوم فارغ");
+ const row={user_id:user.id,day_key:dayKey(),revenue:t.sales,expenses:t.ex,net_profit:t.profit,items_sold:t.items};
+ const {error}=await sb.from("daily_reports").upsert(row,{onConflict:"user_id,day_key"});if(error)return toast(error.message);
+ await sb.from("expenses").delete().eq("user_id",user.id).eq("day_key",dayKey());
+ await sb.from("products").update({today_qty:0}).eq("user_id",user.id);
+ products.forEach(p=>p.today_qty=0);expenses=[];const h=await sb.from("daily_reports").select("*").eq("user_id",user.id).order("day_key",{ascending:false});history=h.data||[];renderProducts();renderExpenses();renderStats();renderHistory();renderReports();toast("تم حفظ وإغلاق اليوم");
+};
+$("clear-day").onclick=async()=>{if(!confirm("تصفير اليوم الحالي؟"))return;await sb.from("expenses").delete().eq("user_id",user.id).eq("day_key",dayKey());await sb.from("products").update({today_qty:0}).eq("user_id",user.id);products.forEach(p=>p.today_qty=0);expenses=[];renderProducts();renderExpenses();renderStats();toast("تم التصفير")};
+
+$("product-form").onsubmit=async e=>{e.preventDefault();const row={user_id:user.id,name:$("product-name").value.trim(),price:Number($("product-price").value),icon:$("product-icon").value,today_qty:0,active:true};const {data,error}=await sb.from("products").insert(row).select().single();if(error)return toast(error.message);products.push(data);$("product-form").reset();renderProducts();renderProductManager();toast("تمت إضافة المنتج")};
+async function deleteProduct(id){if(!confirm("حذف المنتج؟"))return;const {error}=await sb.from("products").update({active:false}).eq("id",id).eq("user_id",user.id);if(error)return toast(error.message);products=products.filter(p=>p.id!==id);renderProducts();renderProductManager()}
+function renderProductManager(){$("product-manager").innerHTML=products.map(p=>`<div class="border rounded-xl p-3 flex justify-between items-center"><div><b>${escapeHtml(p.name)}</b><div class="text-sm text-emerald-700">${money(p.price)}</div></div><button class="text-rose-600" onclick="deleteProduct('${p.id}')">حذف</button></div>`).join("")}
+
+function renderHistory(){$("history-body").innerHTML=history.map(h=>`<tr class="border-b"><td class="p-2">${h.day_key}</td><td class="p-2 text-center">${money(h.revenue)}</td><td class="p-2 text-center">${money(h.expenses)}</td><td class="p-2 text-center font-black">${money(h.net_profit)}</td><td class="p-2 text-center"><button class="text-rose-600" onclick="deleteHistory('${h.id}')">حذف</button></td></tr>`).join("")||`<tr><td colspan="5" class="p-6 text-center text-stone-400">لا يوجد سجل</td></tr>`}
+async function deleteHistory(id){if(!confirm("حذف السجل؟"))return;const {error}=await sb.from("daily_reports").delete().eq("id",id).eq("user_id",user.id);if(error)return toast(error.message);history=history.filter(x=>x.id!==id);renderHistory();renderReports()}
+function renderReports(){const s=history.reduce((a,h)=>a+Number(h.revenue),0),e=history.reduce((a,h)=>a+Number(h.expenses),0);$("period-sales").textContent=money(s);$("period-expenses").textContent=money(e);$("period-profit").textContent=money(s-e);$("period-days").textContent=history.length;
+ const labels=[...history].reverse().slice(-14).map(x=>x.day_key),vals=[...history].reverse().slice(-14).map(x=>x.revenue);if(chart)chart.destroy();chart=new Chart($("sales-chart"),{type:"line",data:{labels,datasets:[{label:"المبيعات",data:vals,tension:.3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+}
+$("export-csv").onclick=()=>{const rows=[["التاريخ","المبيعات","المصاريف","الصافي","القطع"],...history.map(h=>[h.day_key,h.revenue,h.expenses,h.net_profit,h.items_sold])];const csv="\uFEFF"+rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(",")).join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download="cafe-reports.csv";a.click()};
+
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));document.querySelectorAll("[id^=tab-]").forEach(x=>x.classList.add("hidden"));b.classList.add("active");$("tab-"+b.dataset.tab).classList.remove("hidden");if(b.dataset.tab==="reports")renderReports();if(b.dataset.tab==="products")renderProductManager()});
+$("save-settings").onclick=()=>{localStorage.setItem("cafe_name",$("cafe-name").value.trim());toast("تم حفظ الإعدادات")};
+
+async function start(){
+ if(!configured){$("setup-warning").classList.remove("hidden");return}
+ const {data}=await sb.auth.getSession();if(data.session)showApp(data.session.user);
+ sb.auth.onAuthStateChange((_e,s)=>{if(s)showApp(s.user);else{$("app").classList.add("hidden");$("auth-screen").classList.remove("hidden")}});
+}
+async function showApp(u){user=u;$("auth-screen").classList.add("hidden");$("app").classList.remove("hidden");$("user-email").textContent=u.email;try{await loadAll();$("cafe-name").value=localStorage.getItem("cafe_name")||""}catch(e){toast("خطأ: "+(e.message||"تعذر تحميل البيانات"))}}
+start();
+</script>
+</body>
+</html>
