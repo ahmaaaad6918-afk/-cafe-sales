@@ -19,7 +19,43 @@ function showInvoice(id){let s=sales.find(x=>x.id===id);if(!s)return;let e=$('in
 $('sales-filter').value=today();$('sales-filter').onchange=renderSales;$('sales-search').oninput=renderSales;$('print-sales').onclick=()=>window.print();
 $('expense-form').onsubmit=e=>{e.preventDefault();let amount=Number($('expense-amount').value);if(!amount||amount<=0)return say('اكتب مبلغًا صحيحًا');expenses.push({id:uid(),date:today(),createdAt:now(),name:$('expense-name').value.trim(),amount,category:$('expense-category').value,payment:$('expense-payment').value});save();$('expense-form').reset();renderExpenses();say('تم حفظ المصروف')};function renderExpenses(){let rows=de().sort((a,b)=>b.createdAt.localeCompare(a.createdAt));$('expense-day').textContent=today();$('expense-total').textContent=money(sum(rows,e=>e.amount));$('expenses-table').innerHTML=rows.length?rows.map(e=>`<tr><td>${time(e.createdAt)}</td><td><b>${esc(e.name)}</b></td><td>${esc(e.category)}</td><td>${pay(e.payment)}</td><td>${money(e.amount)}</td><td class="no-print"><button class="danger" data-del-exp="${e.id}">حذف</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">لا توجد مصاريف اليوم</td></tr>';document.querySelectorAll('[data-del-exp]').forEach(b=>b.onclick=()=>{if(confirm('حذف هذا المصروف؟')){expenses=expenses.filter(e=>e.id!==b.dataset.delExp);save();renderExpenses()}})}
 function ptotals(ss){let m={};ss.forEach(s=>s.items.forEach(i=>{m[i.name]??={name:i.name,qty:0,total:0};m[i.name].qty+=i.qty;m[i.name].total+=i.total}));return Object.values(m).sort((a,b)=>b.total-a.total)}function renderClosing(){let ss=ds(),ee=de(),rev=sum(ss,s=>s.total),ex=sum(ee,e=>e.amount),old=closings.find(c=>c.date===today());$('closing-date').textContent=today();$('closing-stats').innerHTML=[['عدد الفواتير',ss.length],['المبيعات',money(rev)],['المصاريف',money(ex)],['الصافي',money(rev-ex)]].map(x=>`<div class="stat"><span>${x[0]}</span><strong>${x[1]}</strong></div>`).join('');$('closing-revenue').textContent=money(rev);$('closing-products').innerHTML=ptotals(ss).map(p=>`<div class="item"><span>${esc(p.name)} × ${p.qty}</span><b>${money(p.total)}</b></div>`).join('')||'<div class="empty">لا توجد منتجات مباعة اليوم</div>';$('closing-expenses').innerHTML=ee.map(e=>`<div class="item"><span>${esc(e.name)} (${esc(e.category)})</span><b>${money(e.amount)}</b></div>`).join('')||'<div class="empty">لا توجد مصاريف اليوم</div>';$('closing-orders').innerHTML=ss.map(s=>`<div class="item"><span><b>${s.number}</b> — ${s.items.map(i=>esc(i.name)+' × '+i.qty).join('، ')}</span><b>${money(s.total)}</b></div>`).join('')||'<div class="empty">لا توجد طلبات اليوم</div>';if(old){$('closing-cash').value=old.cash;$('closing-bank').value=old.bank;$('closing-notes').value=old.notes||''}}
-$('save-closing').onclick=()=>{let ss=ds(),ee=de(),c={id:uid(),date:today(),orders:JSON.parse(JSON.stringify(ss)),expenses:JSON.parse(JSON.stringify(ee)),revenue:sum(ss,s=>s.total),expenseTotal:sum(ee,e=>e.amount),net:sum(ss,s=>s.total)-sum(ee,e=>e.amount),cash:Number($('closing-cash').value||0),bank:Number($('closing-bank').value||0),notes:$('closing-notes').value.trim(),productTotals:ptotals(ss)};let i=closings.findIndex(x=>x.date===today());if(i>=0)closings[i]=c;else closings.push(c);save();renderReports();say('تم حفظ إقفال اليوم بالتفاصيل والأرصدة');document.querySelector('[data-page="reports"]').click()};
+
+$('save-closing').onclick=()=>{
+  let ss=ds(),ee=de();
+
+  let c={
+    id:uid(),
+    date:today(),
+    closedAt:now(),
+    orders:JSON.parse(JSON.stringify(ss)),
+    expenses:JSON.parse(JSON.stringify(ee)),
+    revenue:sum(ss,s=>s.total),
+    expenseTotal:sum(ee,e=>e.amount),
+    net:sum(ss,s=>s.total)-sum(ee,e=>e.amount),
+    cash:Number($('closing-cash').value||0),
+    bank:Number($('closing-bank').value||0),
+    notes:$('closing-notes').value.trim(),
+    productTotals:ptotals(ss)
+  };
+
+  closings.push(c);
+  sales=sales.filter(s=>s.date!==today());
+  expenses=expenses.filter(e=>e.date!==today());
+
+  save();
+  $('closing-cash').value='';
+  $('closing-bank').value='';
+  $('closing-notes').value='';
+
+  renderReports();
+  renderSales();
+  renderExpenses();
+  renderClosing();
+
+  say('تم إقفال الفترة وبدء فترة جديدة');
+  document.querySelector('[data-page="reports"]').click();
+};
+
 function renderReports(){$('reports-table').innerHTML=closings.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(c=>`<tr><td>${c.date}</td><td>${c.orders.length}</td><td>${money(c.revenue)}</td><td>${money(c.expenseTotal)}</td><td><b>${money(c.net)}</b></td><td>${money(c.cash)}</td><td>${money(c.bank)}</td><td class="no-print"><button class="secondary" data-report="${c.id}">التفاصيل</button></td></tr>`).join('')||'<tr><td colspan="8" class="empty">ما تم إقفال أي يوم حتى الآن</td></tr>';document.querySelectorAll('[data-report]').forEach(b=>b.onclick=()=>showReport(b.dataset.report))}function showReport(id){let c=closings.find(x=>x.id===id);if(!c)return;let e=$('report-detail');e.classList.remove('hidden');e.innerHTML=`<div class="title"><h3>تقرير يوم ${c.date}</h3><button class="btn secondary no-print" id="print-report">طباعة / PDF</button></div><div class="stats"><div class="stat"><span>المبيعات</span><strong>${money(c.revenue)}</strong></div><div class="stat"><span>المصاريف</span><strong>${money(c.expenseTotal)}</strong></div><div class="stat"><span>الصافي</span><strong>${money(c.net)}</strong></div><div class="stat"><span>عدد الفواتير</span><strong>${c.orders.length}</strong></div></div><h3>المنتجات المباعة بالاسم</h3>${(c.productTotals||ptotals(c.orders)).map(p=>`<div class="item"><span>${esc(p.name)} × ${p.qty}</span><b>${money(p.total)}</b></div>`).join('')||'لا توجد منتجات'}<h3>المصاريف بالاسم</h3>${c.expenses.map(x=>`<div class="item"><span>${esc(x.name)} — ${esc(x.category)}</span><b>${money(x.amount)}</b></div>`).join('')||'لا توجد مصاريف'}<h3>تفاصيل الفواتير</h3>${c.orders.map(s=>`<div class="item"><span>${s.number}: ${s.items.map(i=>esc(i.name)+' × '+i.qty).join('، ')}</span><b>${money(s.total)}</b></div>`).join('')||'لا توجد فواتير'}<div class="total"><span>الكاش الفعلي</span><strong>${money(c.cash)}</strong></div><div class="total"><span>الحساب البنكي الفعلي</span><strong>${money(c.bank)}</strong></div><p>ملاحظات: ${esc(c.notes||'لا توجد')}</p>`;$('print-report').onclick=()=>window.print();e.scrollIntoView({behavior:'smooth'})}
 $('export').onclick=()=>{let blob=new Blob([JSON.stringify({products,sales,expenses,closings},null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='perksip-backup-'+today()+'.json';a.click();URL.revokeObjectURL(a.href)};
 $('reset-test-data').onclick=()=>{if(!confirm('تأكيد مسح جميع الفواتير والمصاريف وتقارير الإقفال؟ لن تُحذف المنتجات والأسعار. لا يمكن التراجع عن هذه الخطوة.'))return;sales=[];expenses=[];closings=[];cart={};save();$('customer').value='';$('closing-cash').value='';$('closing-bank').value='';$('closing-notes').value='';$('report-detail').classList.add('hidden');$('invoice-detail').classList.add('hidden');renderCart();renderSales();renderExpenses();renderClosing();renderReports();say('تم مسح بيانات الاختبار والإبقاء على المنتجات');};
