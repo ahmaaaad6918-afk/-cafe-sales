@@ -39,8 +39,8 @@ $('save-closing').onclick=()=>{
   };
 
   closings.push(c);
-  sales=sales.filter(s=>s.date!==today());
-  expenses=expenses.filter(e=>e.date!==today());
+sales=sales.filter(s=>s.date!==today());
+expenses=expenses.filter(e=>e.date!==today());
 
   save();
   $('closing-cash').value='';
